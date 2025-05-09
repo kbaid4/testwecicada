@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 
 const EventsManagementPage = () => {
   const navigate = useNavigate();
@@ -10,55 +9,6 @@ const EventsManagementPage = () => {
   const [allEvents, setAllEvents] = useState([]);
   const [currentEvent, setCurrentEvent] = useState(null);
   const [tasks, setTasks] = useState([]);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [loadingDelete, setLoadingDelete] = useState(false);
-  const [errorDelete, setErrorDelete] = useState('');
-
-  const handleEditEvent = () => {
-    // For now, navigate to a dedicated edit page (you can implement a modal if you prefer)
-    if (currentEvent) {
-      navigate(`/EditEventPage/${currentEvent._id}`);
-    }
-  };
-
-  const handleDeleteEvent = () => {
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDeleteEvent = async () => {
-    if (!currentEvent) return;
-    setLoadingDelete(true);
-    setErrorDelete('');
-    try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5003/api/events/${currentEvent._id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setShowDeleteConfirm(false);
-      // Re-fetch events after deletion
-      await fetchEvents();
-      const token2 = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5003/api/events', {
-        headers: { Authorization: `Bearer ${token2}` }
-      });
-      setAllEvents(res.data);
-      if (res.data.length > 0) {
-        navigate(`/EventsManagementPage/${res.data[0]._id}`);
-      } else {
-        setCurrentEvent(null);
-        navigate('/EventsManagementPage');
-      }
-    } catch (err) {
-      setErrorDelete('Failed to delete event.');
-    }
-    setLoadingDelete(false);
-  };
-
-  const cancelDeleteEvent = () => {
-    setShowDeleteConfirm(false);
-    setErrorDelete('');
-  };
-
 
   const mainNavItems = [
     { name: 'Home', path: '/SuppliersPage' },
@@ -71,91 +21,41 @@ const EventsManagementPage = () => {
     { name: 'My Team', path: '/MyTeam' }
   ];
 
-  // Fetch events as a top-level function for reuse
-  const fetchEvents = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5003/api/events', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setAllEvents(res.data);
-      const foundEvent = res.data.find(ev => ev._id === eventId);
-      setCurrentEvent(foundEvent || null);
-    } catch (err) {
-      // Optionally handle error
-    }
-  };
-
   useEffect(() => {
-    const fetchTasks = async () => {
-      if (!eventId) return setTasks([]);
-      try {
-        const token = localStorage.getItem('token');
-        const res = await axios.get(`http://localhost:5003/api/tasks?eventId=${eventId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setTasks(res.data);
-      } catch (err) {
-        setTasks([]);
-      }
-    };
-    fetchEvents();
-    fetchTasks();
+    const eventsFromStorage = JSON.parse(localStorage.getItem('events')) || [];
+    setAllEvents(eventsFromStorage);
+    const foundEvent = eventsFromStorage.find(ev => ev.id === eventId);
+    setCurrentEvent(foundEvent);
+    const allTasksObj = JSON.parse(localStorage.getItem('tasks')) || {};
+    setTasks(allTasksObj[eventId] || []);
   }, [eventId]);
 
   const handleSelectEvent = (newEventId) => {
     navigate(`/EventsManagementPage/${newEventId}`);
   };
 
-  const handleCreateEvent = async (eventData) => {
-    try {
-      const token = localStorage.getItem('token');
-      await axios.post('http://localhost:5003/api/events', eventData, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      // Re-fetch events after creation
-      await fetchEvents();
-    } catch (err) {
-      // Optionally handle error
-    }
+  const handleCreateTask = () => {
+    navigate(`/CreateTaskPage/${eventId}`);
   };
 
-  const handleStatusChange = async (taskIndex, newStatus) => {
-    const task = tasks[taskIndex];
-    if (!task) return;
-    try {
-      const token = localStorage.getItem('token');
-      const updated = { ...task, status: newStatus };
-      await axios.put(`http://localhost:5003/api/tasks/${task._id}`, updated, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      // Refetch tasks after update
-      const res = await axios.get(`http://localhost:5003/api/tasks?eventId=${eventId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setTasks(res.data);
-    } catch (err) {
-      // Optionally show error
-    }
+  const handleStatusChange = (taskIndex, newStatus) => {
+    const updatedTasks = tasks.map((task, index) =>
+      index === taskIndex ? { ...task, status: newStatus } : task
+    );
+    setTasks(updatedTasks);
+    const allTasksObj = JSON.parse(localStorage.getItem('tasks')) || {};
+    allTasksObj[eventId] = updatedTasks;
+    localStorage.setItem('tasks', JSON.stringify(allTasksObj));
   };
 
-  const handleTaskCompletion = async (taskIndex) => {
-    const task = tasks[taskIndex];
-    if (!task) return;
-    try {
-      const token = localStorage.getItem('token');
-      const newStatus = task.status === 'Completed' ? 'In Progress' : 'Completed';
-      await axios.put(`http://localhost:5003/api/tasks/${task._id}`, { ...task, status: newStatus }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      // Refetch tasks after update
-      const res = await axios.get(`http://localhost:5003/api/tasks?eventId=${eventId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setTasks(res.data);
-    } catch (err) {
-      // Optionally show error
-    }
+  const handleTaskCompletion = (taskIndex) => {
+    const updatedTasks = tasks.map((task, index) =>
+      index === taskIndex ? { ...task, status: task.status === 'Completed' ? 'In Progress' : 'Completed' } : task
+    );
+    setTasks(updatedTasks);
+    const allTasksObj = JSON.parse(localStorage.getItem('tasks')) || {};
+    allTasksObj[eventId] = updatedTasks;
+    localStorage.setItem('tasks', JSON.stringify(allTasksObj));
   };
 
   const calculateTaskCompletion = () => {
@@ -163,49 +63,6 @@ const EventsManagementPage = () => {
     const completedTasks = tasks.filter(task => task.status === 'Completed').length;
     return ((completedTasks / tasks.length) * 100).toFixed(2);
   };
-
-  // Create Task
-  const handleCreateTask = async () => {
-    // You may want to show a modal or form in real use, here is a simple example:
-    const name = window.prompt('Task name?');
-    if (!name) return;
-    try {
-      const token = localStorage.getItem('token');
-      await axios.post('http://localhost:5003/api/tasks', {
-        name,
-        eventId,
-        status: 'In Progress',
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      // Refetch tasks
-      const res = await axios.get(`http://localhost:5003/api/tasks?eventId=${eventId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setTasks(res.data);
-    } catch (err) {
-      // Optionally show error
-    }
-  };
-
-  // Delete Task
-  const handleDeleteTask = async (taskId) => {
-    if (!window.confirm('Delete this task?')) return;
-    try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5003/api/tasks/${taskId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      // Refetch tasks
-      const res = await axios.get(`http://localhost:5003/api/tasks?eventId=${eventId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setTasks(res.data);
-    } catch (err) {
-      // Optionally show error
-    }
-  };
-
 
   const statusOptions = ['Stopped', 'In Progress', 'Completed'];
 
@@ -244,27 +101,6 @@ const EventsManagementPage = () => {
         </div>
       </nav>
 
-      {showDeleteConfirm && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000
-        }}>
-          <div style={{ background: '#fff', padding: '2rem', borderRadius: '12px', minWidth: 340, boxShadow: '0 4px 24px rgba(0,0,0,0.18)', textAlign: 'center' }}>
-            <h2 style={{ color: '#D50000', marginBottom: 16 }}>Confirm Delete</h2>
-            <div style={{ marginBottom: 24 }}>
-              Are you sure you want to delete this event? This action cannot be undone.
-            </div>
-            {errorDelete && <div style={{ color: 'red', marginBottom: 12 }}>{errorDelete}</div>}
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <button onClick={confirmDeleteEvent} className="primary-btn outline" style={{ background: '#D50000', color: '#fff', minWidth: 100 }} disabled={loadingDelete}>
-                {loadingDelete ? 'Deleting...' : 'Yes, Delete'}
-              </button>
-              <button onClick={cancelDeleteEvent} className="primary-btn outline" style={{ minWidth: 100 }} disabled={loadingDelete}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <main className="content-area">
         <header className="content-header">
           <div className="header-left">
@@ -273,15 +109,9 @@ const EventsManagementPage = () => {
               <button onClick={handleCreateTask} className="primary-btn create-task-btn">Create Task</button>
               <select className="primary-btn outline select-event" onChange={(e) => handleSelectEvent(e.target.value)} value={eventId}>
                 {allEvents.map((ev, idx) => (
-                  <option key={ev._id} value={ev._id}>{ev.name}</option>
+                  <option key={ev.id} value={ev.id}>Event {idx + 1} - {ev.name}</option>
                 ))}
               </select>
-              {currentEvent && (
-                <>
-                  <button onClick={handleEditEvent} className="primary-btn outline">Edit Event</button>
-                  <button onClick={handleDeleteEvent} className="primary-btn outline" style={{ background: '#D50000', color: '#fff' }}>Delete Event</button>
-                </>
-              )}
             </div>
           </div>
         </header>
@@ -328,14 +158,6 @@ const EventsManagementPage = () => {
                       />
                     </td>
                     <td>{calculateTaskCompletion()}%</td>
-                    <td>
-                      <button
-                        onClick={() => handleDeleteTask(task._id)}
-                        style={{ background: '#D50000', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}
-                      >
-                        Delete
-                      </button>
-                    </td>
                   </tr>
                 ))
               )}

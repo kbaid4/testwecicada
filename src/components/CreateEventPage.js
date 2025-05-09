@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 
 const CreateEventPage = () => {
   const navigate = useNavigate();
@@ -90,26 +89,24 @@ const CreateEventPage = () => {
   const adminOptions = ['Jerry', 'Sam', 'Cole', 'Bryan'];
 
   // Handle creating a new event
-  const handleCreateEvent = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        alert('You are not signed in. Please sign in to create an event.');
-        navigate('/SignInPage');
-        return;
-      }
-      await axios.post('http://localhost:5003/api/events', formData, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      navigate('/Events');
-    } catch (err) {
-      if (err.response && err.response.status === 401) {
-        alert('Session expired or unauthorized. Please sign in again.');
-        navigate('/SignInPage');
-      } else {
-        alert('Failed to create event.');
-      }
-    }
+  const handleCreateEvent = () => {
+    // 1) Get existing events from localStorage
+    const existingEvents = JSON.parse(localStorage.getItem('events')) || [];
+
+    // 2) Create a new event object with unique ID
+    const newEvent = {
+      id: generateId(),
+      ...formData
+    };
+
+    // 3) Push it into the array
+    existingEvents.push(newEvent);
+
+    // 4) Save updated array back to localStorage
+    localStorage.setItem('events', JSON.stringify(existingEvents));
+
+    // 5) Navigate to the /Events page
+    navigate('/Events');
   };
 
   return (
@@ -475,4 +472,3 @@ const CreateEventPage = () => {
 };
 
 export default CreateEventPage;
-
