@@ -13,6 +13,10 @@ const PORT = process.env.PORT || 5003;
 app.use(cors());
 app.use(express.json());
 
+// Serve uploaded files statically
+import path from 'path';
+app.use('/uploads', express.static(path.join(process.cwd(), 'backend', 'uploads')));
+
 // Routes
 import authRoutes from './routes/auth.js';
 import eventsRoutes from './routes/events.js';

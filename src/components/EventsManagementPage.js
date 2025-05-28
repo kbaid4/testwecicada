@@ -5,10 +5,70 @@ const EventsManagementPage = () => {
   const navigate = useNavigate();
   const { eventId } = useParams();
 
+  // Guard: if eventId is missing, redirect to dashboard
+  useEffect(() => {
+    if (!eventId) {
+      navigate('/SuppliersPage', { replace: true });
+    }
+  }, [eventId, navigate]);
+
   const [activeNav, setActiveNav] = useState('Events');
   const [allEvents, setAllEvents] = useState([]);
   const [currentEvent, setCurrentEvent] = useState(null);
   const [tasks, setTasks] = useState([]);
+
+  // Document upload/download state
+  const [documents, setDocuments] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  
+
+  // ...existing code...
+
+  // Delete task
+  const handleDeleteTask = async (taskIndex) => {
+    const taskToDelete = tasks[taskIndex];
+    if (!taskToDelete || !taskToDelete.id) {
+      alert('Task ID not found.');
+      return;
+    }
+    if (!window.confirm('Are you sure you want to delete this task?')) return;
+
+    try {
+      const token = localStorage.getItem('token');
+const res = await fetch(`/api/tasks/${taskToDelete.id}`, {
+  method: 'DELETE',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+  },
+  credentials: 'include',
+});
+      if (res.ok) {
+        const updatedTasks = tasks.filter((_, idx) => idx !== taskIndex);
+        setTasks(updatedTasks);
+        // Update localStorage if used
+        const allTasksObj = JSON.parse(localStorage.getItem('tasks')) || {};
+        allTasksObj[eventId] = updatedTasks;
+        localStorage.setItem('tasks', JSON.stringify(allTasksObj));
+      } else {
+        alert('Failed to delete task.');
+      }
+    } catch (err) {
+      alert('Error deleting task.');
+    }
+  };
+
+  // Edit task: navigate to EditTaskPage with taskId and eventId
+  const handleEditTask = (taskIndex) => {
+    const task = tasks[taskIndex];
+    if (!task || !task.id) {
+      alert('Task ID not found.');
+      return;
+    }
+    navigate(`/EditTaskPage/${task.id}?eventId=${eventId}`);
+  };
 
   const mainNavItems = [
     { name: 'Home', path: '/SuppliersPage' },
@@ -29,6 +89,66 @@ const EventsManagementPage = () => {
     const allTasksObj = JSON.parse(localStorage.getItem('tasks')) || {};
     setTasks(allTasksObj[eventId] || []);
   }, [eventId]);
+
+  // Fetch documents for the event
+  useEffect(() => {
+    if (!eventId) return;
+    const fetchDocs = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/events/${eventId}/documents`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const docs = await res.json();
+          setDocuments(docs);
+        } else {
+          setDocuments([]);
+        }
+      } catch {
+        setDocuments([]);
+      }
+    };
+    fetchDocs();
+  }, [eventId]);
+
+  // Handle file input change
+  const handleFileChange = (e) => {
+    setSelectedFile(e.target.files[0]);
+    setUploadError('');
+  };
+
+  // Handle upload submit
+  const handleUploadDocument = async (e) => {
+    e.preventDefault();
+    if (!selectedFile) {
+      setUploadError('Please select a file to upload.');
+      return;
+    }
+    setUploading(true);
+    setUploadError('');
+    try {
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      const res = await fetch(`/api/events/${eventId}/documents`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+      if (res.ok) {
+        const newDoc = await res.json();
+        setDocuments(prev => [...prev, newDoc]);
+        setSelectedFile(null);
+      } else {
+        const err = await res.json();
+        setUploadError(err.message || 'Failed to upload');
+      }
+    } catch {
+      setUploadError('Failed to upload');
+    }
+    setUploading(false);
+  };
 
   const handleSelectEvent = (newEventId) => {
     navigate(`/EventsManagementPage/${newEventId}`);
@@ -107,6 +227,7 @@ const EventsManagementPage = () => {
             <h1 className="event-title">{currentEvent ? currentEvent.name : 'Event Management'}</h1>
             <div className="action-btns">
               <button onClick={handleCreateTask} className="primary-btn create-task-btn">Create Task</button>
+              <button onClick={() => navigate(`/EditEventPage/${eventId}`)} className="primary-btn outline" style={{ color: '#A888B5' }}>Edit Event</button>
               <select className="primary-btn outline select-event" onChange={(e) => handleSelectEvent(e.target.value)} value={eventId}>
                 {allEvents.map((ev, idx) => (
                   <option key={ev.id} value={ev.id}>Event {idx + 1} - {ev.name}</option>
@@ -158,16 +279,53 @@ const EventsManagementPage = () => {
                       />
                     </td>
                     <td>{calculateTaskCompletion()}%</td>
+                    <td>
+                      <button className="task-edit-btn" onClick={() => handleEditTask(index)}>Edit</button>
+                      <button className="task-delete-btn" onClick={() => handleDeleteTask(index)}>Delete</button>
+                    </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Document Upload & Download Section */}
+        <section className="documents-section" style={{ marginTop: 40 }}>
+          <h2 style={{ fontSize: 20, color: '#441752', marginBottom: 10 }}>Event Documents</h2>
+          {/* Upload */}
+          <form onSubmit={handleUploadDocument} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <input type="file" onChange={handleFileChange} />
+            <button type="submit" className="primary-btn" disabled={uploading}>{uploading ? 'Uploading...' : 'Upload'}</button>
+            {uploadError && <span style={{ color: 'red', marginLeft: 8 }}>{uploadError}</span>}
+          </form>
+          {/* List */}
+          <div>
+            {documents.length === 0 ? (
+              <div style={{ color: '#888' }}>No documents uploaded yet.</div>
+            ) : (
+              <ul style={{ listStyle: 'none', padding: 0 }}>
+                {documents.map(doc => (
+                  <li key={doc._id || doc.filename} style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>{doc.originalname || doc.filename}</span>
+                    <a
+                      href={`/api/events/documents/download/${doc.filename}`}
+                      className="primary-btn outline"
+                      style={{ padding: '4px 12px', fontSize: 13 }}
+                      target="_blank" rel="noopener noreferrer"
+                    >
+                      Download
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
       </main>
 
 
-      <style jsx>{`
+      <style>{`
          :root {
           --primary-blue: #A888B5;
           --hover-blue: #A888B5;
